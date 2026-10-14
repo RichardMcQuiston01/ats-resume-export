@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.3.1
+
+- Fixed a dangling separator in date ranges: an entry with only one date (for example an education entry with just a graduation date) now shows `(2018-05)` instead of `( - 2018-05)`. The same applies to a lone start date.
+- Fixed experience and education entries never printing their `location`. It now follows the heading after a comma ("Senior Engineer — Acme, Remote") in the HTML, DOCX, PDF, and plain-text exporters. Entries without a location are unchanged.
+- Note: output changes for entries that have a location or are missing a start or end date; everything else is identical to 0.3.0.
+
 ## 0.3.0
 
 - Added configurable presentation for the HTML, DOCX, and PDF exporters through `ExportOptions.style`: font family (`sans-serif`, `serif`, `monospace`), body, name, and heading sizes, line spacing, section and entry spacing, margins, paper size (`letter` or `a4`), and heading case. Pass a preset (`'compact'`, `'standard'`, `'comfortable'`) or an object of options, optionally on top of a preset.

@@ -26,7 +26,7 @@ describe('exportResumeAsPlainText', () => {
     const text = exportResumeAsPlainText(createFixtureResume());
 
     expect(text).toContain(
-      'Senior Software Engineer - Acme Corp (2022-03 - Present)'
+      'Senior Software Engineer - Acme Corp, Remote (2022-03 - Present)'
     );
   });
 
