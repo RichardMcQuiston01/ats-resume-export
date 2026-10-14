@@ -1,16 +1,72 @@
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
+import {
+  Document,
+  type IStylesOptions,
+  type ISectionPropertiesOptions,
+  HeadingLevel,
+  LineRuleType,
+  Packer,
+  Paragraph,
+  TextRun,
+} from 'docx';
 
 import { parseMarkdownRuns } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
+import {
+  resolveExportStyle,
+  type FontFamily,
+  type PageSize,
+  type ResolvedExportStyle,
+} from './style';
 
-function sectionHeading(text: string): Paragraph {
+/** Font names every Word install has; Word substitutes closely if one is missing. */
+const DOCX_FONT_NAMES: Record<FontFamily, string> = {
+  'sans-serif': 'Arial',
+  serif: 'Times New Roman',
+  monospace: 'Courier New',
+};
+
+/** Page sizes in twentieths of a point (twips): US Letter and ISO A4. */
+const DOCX_PAGE_SIZES: Record<PageSize, { width: number; height: number }> = {
+  letter: { width: 12240, height: 15840 },
+  a4: { width: 11906, height: 16838 },
+};
+
+const TWIPS_PER_POINT = 20;
+const HALF_POINTS_PER_POINT = 2;
+/** Word's "single" line spacing is 240 (240ths of a line). */
+const SINGLE_LINE = 240;
+
+function toTwips(points: number): number {
+  return Math.round(points * TWIPS_PER_POINT);
+}
+
+function toHalfPoints(points: number): number {
+  return Math.round(points * HALF_POINTS_PER_POINT);
+}
+
+function sectionHeading(text: string, style: ResolvedExportStyle): Paragraph {
+  const heading = style.headingCase === 'title' ? text : text.toUpperCase();
+  const spacing = {
+    before:
+      style.sectionSpacing === undefined ? 240 : toTwips(style.sectionSpacing),
+    after: 80,
+  };
+  if (style.headingFontSize === undefined) {
+    return new Paragraph({
+      text: heading,
+      heading: HeadingLevel.HEADING_2,
+      spacing,
+    });
+  }
   return new Paragraph({
-    text: text.toUpperCase(),
+    children: [
+      new TextRun({ text: heading, size: toHalfPoints(style.headingFontSize) }),
+    ],
     heading: HeadingLevel.HEADING_2,
-    spacing: { before: 240, after: 80 },
+    spacing,
   });
 }
 
@@ -27,12 +83,78 @@ function bulletParagraph(text: string, richText: boolean): Paragraph {
   });
 }
 
-function entryHeadingParagraph(heading: string, dateRange: string): Paragraph {
+function entryHeadingParagraph(
+  heading: string,
+  dateRange: string,
+  style: ResolvedExportStyle
+): Paragraph {
   const runs = [new TextRun({ text: heading, bold: true })];
   if (dateRange) {
     runs.push(new TextRun({ text: `  (${dateRange})`, italics: true }));
   }
-  return new Paragraph({ children: runs, spacing: { before: 120 } });
+  return new Paragraph({
+    children: runs,
+    spacing: {
+      before:
+        style.entrySpacing === undefined ? 120 : toTwips(style.entrySpacing),
+    },
+  });
+}
+
+/** Document-wide font, size, and line spacing. Only built when a style is set. */
+function documentStyles(style: ResolvedExportStyle): IStylesOptions {
+  return {
+    default: {
+      document: {
+        run: {
+          ...(style.fontFamily === undefined
+            ? {}
+            : { font: DOCX_FONT_NAMES[style.fontFamily] }),
+          ...(style.fontSize === undefined
+            ? {}
+            : { size: toHalfPoints(style.fontSize) }),
+        },
+        paragraph:
+          style.lineSpacing === undefined
+            ? {}
+            : {
+                spacing: {
+                  line: Math.round(SINGLE_LINE * style.lineSpacing),
+                  lineRule: LineRuleType.AUTO,
+                },
+              },
+      },
+    },
+  };
+}
+
+/** Page size and margins for the document section. Empty unless the style sets them. */
+function sectionProperties(style: ResolvedExportStyle): {
+  properties?: ISectionPropertiesOptions;
+} {
+  if (style.pageSize === undefined && style.margin === undefined) {
+    return {};
+  }
+  const margin = style.margin === undefined ? undefined : toTwips(style.margin);
+  return {
+    properties: {
+      page: {
+        ...(style.pageSize === undefined
+          ? {}
+          : { size: DOCX_PAGE_SIZES[style.pageSize] }),
+        ...(margin === undefined
+          ? {}
+          : {
+              margin: {
+                top: margin,
+                right: margin,
+                bottom: margin,
+                left: margin,
+              },
+            }),
+      },
+    },
+  };
 }
 
 /** Renders a resume as a .docx document, importable in Microsoft Word. */
@@ -41,6 +163,7 @@ export async function exportResumeAsDocx(
   options: ExportOptions = {}
 ): Promise<Blob> {
   const richText = options.richText ?? false;
+  const style = resolveExportStyle(options.style);
   const { contact } = resume;
   const children: Paragraph[] = [];
 
@@ -50,7 +173,10 @@ export async function exportResumeAsDocx(
         new TextRun({
           text: contact.fullName || 'Resume',
           bold: true,
-          size: 36,
+          size:
+            style.nameFontSize === undefined
+              ? 36
+              : toHalfPoints(style.nameFontSize),
         }),
       ],
     })
@@ -74,14 +200,14 @@ export async function exportResumeAsDocx(
   }
 
   if (resume.summary) {
-    children.push(sectionHeading('Summary'));
+    children.push(sectionHeading('Summary', style));
     children.push(new Paragraph({ text: resume.summary }));
   }
 
   const sectionBuilders: Record<SectionKey, () => void> = {
     experience: () => {
       if (resume.experience.length > 0) {
-        children.push(sectionHeading('Experience'));
+        children.push(sectionHeading('Experience', style));
         for (const entry of resume.experience) {
           const heading = [entry.title, entry.company]
             .filter(Boolean)
@@ -91,7 +217,7 @@ export async function exportResumeAsDocx(
             entry.endDate,
             entry.isCurrent
           );
-          children.push(entryHeadingParagraph(heading, dateRange));
+          children.push(entryHeadingParagraph(heading, dateRange, style));
           for (const highlight of entry.highlights) {
             if (highlight.trim()) {
               children.push(bulletParagraph(highlight, richText));
@@ -102,7 +228,7 @@ export async function exportResumeAsDocx(
     },
     education: () => {
       if (resume.education.length > 0) {
-        children.push(sectionHeading('Education'));
+        children.push(sectionHeading('Education', style));
         for (const entry of resume.education) {
           const heading = [entry.credential, entry.institution]
             .filter(Boolean)
@@ -112,7 +238,7 @@ export async function exportResumeAsDocx(
             entry.endDate,
             entry.isCurrent
           );
-          children.push(entryHeadingParagraph(heading, dateRange));
+          children.push(entryHeadingParagraph(heading, dateRange, style));
           for (const highlight of entry.highlights) {
             if (highlight.trim()) {
               children.push(bulletParagraph(highlight, richText));
@@ -123,7 +249,7 @@ export async function exportResumeAsDocx(
     },
     skills: () => {
       if (resume.skills.length > 0) {
-        children.push(sectionHeading('Skills'));
+        children.push(sectionHeading('Skills', style));
         for (const group of resume.skills) {
           const skillsLine = group.skills.filter(Boolean).join(', ');
           if (skillsLine) {
@@ -141,7 +267,7 @@ export async function exportResumeAsDocx(
     },
     certifications: () => {
       if (resume.certifications.length > 0) {
-        children.push(sectionHeading('Certifications'));
+        children.push(sectionHeading('Certifications', style));
         for (const entry of resume.certifications) {
           const parts = [entry.name, entry.issuer, entry.issueDate].filter(
             Boolean
@@ -152,12 +278,17 @@ export async function exportResumeAsDocx(
     },
     projects: () => {
       if (resume.projects.length > 0) {
-        children.push(sectionHeading('Projects'));
+        children.push(sectionHeading('Projects', style));
         for (const entry of resume.projects) {
           children.push(
             new Paragraph({
               children: [new TextRun({ text: entry.name, bold: true })],
-              spacing: { before: 120 },
+              spacing: {
+                before:
+                  style.entrySpacing === undefined
+                    ? 120
+                    : toTwips(style.entrySpacing),
+              },
             })
           );
           if (entry.description) {
@@ -176,6 +307,9 @@ export async function exportResumeAsDocx(
     sectionBuilders[key]();
   }
 
-  const doc = new Document({ sections: [{ children }] });
+  const doc = new Document({
+    ...(style.customized ? { styles: documentStyles(style) } : {}),
+    sections: [{ ...sectionProperties(style), children }],
+  });
   return Packer.toBlob(doc);
 }

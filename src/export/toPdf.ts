@@ -6,15 +6,50 @@ import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
+import { resolveExportStyle, type FontFamily, type PageSize } from './style';
 
-const PAGE_WIDTH = 612;
-const PAGE_HEIGHT = 792;
-const MARGIN = 54;
-const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-const NAME_SIZE = 18;
-const HEADING_SIZE = 10;
-const BODY_SIZE = 10;
-const LINE_HEIGHT_RATIO = 1.25;
+/** Page sizes in points: US Letter and ISO A4. */
+const PDF_PAGE_SIZES: Record<PageSize, { width: number; height: number }> = {
+  letter: { width: 612, height: 792 },
+  a4: { width: 595.28, height: 841.89 },
+};
+const DEFAULT_MARGIN = 54;
+const DEFAULT_NAME_SIZE = 18;
+const DEFAULT_HEADING_SIZE = 10;
+const DEFAULT_BODY_SIZE = 10;
+const DEFAULT_LINE_HEIGHT_RATIO = 1.25;
+const DEFAULT_SECTION_SPACING = 6;
+const DEFAULT_ENTRY_SPACING = 4;
+
+/** Standard-14 PDF fonts for each family: every PDF reader has them built in. */
+const PDF_FONTS: Record<
+  FontFamily,
+  { regular: StandardFonts; bold: StandardFonts; italic: StandardFonts }
+> = {
+  'sans-serif': {
+    regular: StandardFonts.Helvetica,
+    bold: StandardFonts.HelveticaBold,
+    italic: StandardFonts.HelveticaOblique,
+  },
+  serif: {
+    regular: StandardFonts.TimesRoman,
+    bold: StandardFonts.TimesRomanBold,
+    italic: StandardFonts.TimesRomanItalic,
+  },
+  monospace: {
+    regular: StandardFonts.Courier,
+    bold: StandardFonts.CourierBold,
+    italic: StandardFonts.CourierOblique,
+  },
+};
+
+interface PageLayout {
+  pageWidth: number;
+  pageHeight: number;
+  margin: number;
+  lineHeightRatio: number;
+}
+
 const TEXT_COLOR = rgb(0.12, 0.16, 0.22);
 
 interface WriteTextOptions {
@@ -48,15 +83,25 @@ class PdfWriter {
   private page: PDFPage;
   private y: number;
 
-  constructor(private readonly doc: PDFDocument) {
-    this.page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    this.y = PAGE_HEIGHT - MARGIN;
+  constructor(
+    private readonly doc: PDFDocument,
+    private readonly layout: PageLayout
+  ) {
+    this.page = doc.addPage([layout.pageWidth, layout.pageHeight]);
+    this.y = layout.pageHeight - layout.margin;
+  }
+
+  private get contentWidth(): number {
+    return this.layout.pageWidth - this.layout.margin * 2;
   }
 
   private ensureSpace(height: number): void {
-    if (this.y - height < MARGIN) {
-      this.page = this.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-      this.y = PAGE_HEIGHT - MARGIN;
+    if (this.y - height < this.layout.margin) {
+      this.page = this.doc.addPage([
+        this.layout.pageWidth,
+        this.layout.pageHeight,
+      ]);
+      this.y = this.layout.pageHeight - this.layout.margin;
     }
   }
 
@@ -92,14 +137,14 @@ class PdfWriter {
       text,
       options.font,
       options.size,
-      CONTENT_WIDTH - indent
+      this.contentWidth - indent
     );
-    const lineHeight = options.size * LINE_HEIGHT_RATIO;
+    const lineHeight = options.size * this.layout.lineHeightRatio;
 
     for (const line of lines) {
       this.ensureSpace(lineHeight);
       this.page.drawText(line, {
-        x: MARGIN + indent,
+        x: this.layout.margin + indent,
         y: this.y - options.size,
         size: options.size,
         font: options.font,
@@ -119,8 +164,8 @@ class PdfWriter {
   writeRuns(runs: RichTextRun[], options: WriteRunsOptions): void {
     const { size, fonts } = options;
     const indent = options.indent ?? 0;
-    const maxWidth = CONTENT_WIDTH - indent;
-    const lineHeight = size * LINE_HEIGHT_RATIO;
+    const maxWidth = this.contentWidth - indent;
+    const lineHeight = size * this.layout.lineHeightRatio;
     const spaceWidth = fonts.regular.widthOfTextAtSize(' ', size);
 
     const words: WordSegment[][] = [];
@@ -163,7 +208,7 @@ class PdfWriter {
         return;
       }
       this.ensureSpace(lineHeight);
-      let x = MARGIN + indent;
+      let x = this.layout.margin + indent;
       for (const word of line) {
         for (const segment of word) {
           this.page.drawText(segment.text, {
@@ -209,21 +254,32 @@ export async function exportResumeAsPdf(
 ): Promise<Blob> {
   const richText = options.richText ?? false;
   const doc = await PDFDocument.create();
-  const regularFont = await doc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-  const italicFont = richText
-    ? await doc.embedFont(StandardFonts.HelveticaOblique)
-    : regularFont;
+  const style = resolveExportStyle(options.style);
+  const fonts = PDF_FONTS[style.fontFamily ?? 'sans-serif'];
+  const regularFont = await doc.embedFont(fonts.regular);
+  const boldFont = await doc.embedFont(fonts.bold);
+  const italicFont = richText ? await doc.embedFont(fonts.italic) : regularFont;
+  const nameSize = style.nameFontSize ?? DEFAULT_NAME_SIZE;
+  const headingSize = style.headingFontSize ?? DEFAULT_HEADING_SIZE;
+  const bodySize = style.fontSize ?? DEFAULT_BODY_SIZE;
+  const sectionSpacing = style.sectionSpacing ?? DEFAULT_SECTION_SPACING;
+  const entrySpacing = style.entrySpacing ?? DEFAULT_ENTRY_SPACING;
+  const pageSize = PDF_PAGE_SIZES[style.pageSize ?? 'letter'];
   const runFonts: RunFonts = {
     regular: regularFont,
     bold: boldFont,
     italic: italicFont,
   };
-  const writer = new PdfWriter(doc);
+  const writer = new PdfWriter(doc, {
+    pageWidth: pageSize.width,
+    pageHeight: pageSize.height,
+    margin: style.margin ?? DEFAULT_MARGIN,
+    lineHeightRatio: style.lineSpacing ?? DEFAULT_LINE_HEIGHT_RATIO,
+  });
   const { contact } = resume;
 
   writer.writeText(contact.fullName || 'Resume', {
-    size: NAME_SIZE,
+    size: nameSize,
     font: boldFont,
     gapAfter: 2,
   });
@@ -233,7 +289,7 @@ export async function exportResumeAsPdf(
     .join('   |   ');
   if (contactLine) {
     writer.writeText(contactLine, {
-      size: BODY_SIZE,
+      size: bodySize,
       font: regularFont,
       gapAfter: 2,
     });
@@ -246,7 +302,7 @@ export async function exportResumeAsPdf(
       .join('   |   ');
     if (linksLine) {
       writer.writeText(linksLine, {
-        size: BODY_SIZE,
+        size: bodySize,
         font: regularFont,
         gapAfter: 4,
       });
@@ -254,17 +310,20 @@ export async function exportResumeAsPdf(
   }
 
   const writeSectionHeading = (text: string): void => {
-    writer.writeSpacer(6);
-    writer.writeText(text.toUpperCase(), {
-      size: HEADING_SIZE,
-      font: boldFont,
-      gapAfter: 4,
-    });
+    writer.writeSpacer(sectionSpacing);
+    writer.writeText(
+      style.headingCase === 'title' ? text : text.toUpperCase(),
+      {
+        size: headingSize,
+        font: boldFont,
+        gapAfter: 4,
+      }
+    );
   };
 
   const writeEntryHeading = (heading: string, dateRange: string): void => {
     const text = dateRange ? `${heading}   (${dateRange})` : heading;
-    writer.writeText(text, { size: BODY_SIZE, font: boldFont, gapAfter: 1 });
+    writer.writeText(text, { size: bodySize, font: boldFont, gapAfter: 1 });
   };
 
   const writeHighlights = (highlights: string[]): void => {
@@ -278,23 +337,23 @@ export async function exportResumeAsPdf(
             { text: '• ', bold: false, italic: false },
             ...parseMarkdownRuns(highlight),
           ],
-          { size: BODY_SIZE, fonts: runFonts, indent: 10 }
+          { size: bodySize, fonts: runFonts, indent: 10 }
         );
       } else {
         writer.writeText(`• ${highlight}`, {
-          size: BODY_SIZE,
+          size: bodySize,
           font: regularFont,
           indent: 10,
         });
       }
     }
-    writer.writeSpacer(4);
+    writer.writeSpacer(entrySpacing);
   };
 
   if (resume.summary) {
     writeSectionHeading('Summary');
     writer.writeText(resume.summary, {
-      size: BODY_SIZE,
+      size: bodySize,
       font: regularFont,
       gapAfter: 2,
     });
@@ -338,7 +397,7 @@ export async function exportResumeAsPdf(
           const skillsLine = group.skills.filter(Boolean).join(', ');
           if (skillsLine) {
             writer.writeText(`${group.category}: ${skillsLine}`, {
-              size: BODY_SIZE,
+              size: bodySize,
               font: regularFont,
             });
           }
@@ -353,7 +412,7 @@ export async function exportResumeAsPdf(
             Boolean
           );
           writer.writeText(parts.join(' — '), {
-            size: BODY_SIZE,
+            size: bodySize,
             font: regularFont,
           });
         }
@@ -364,13 +423,13 @@ export async function exportResumeAsPdf(
         writeSectionHeading('Projects');
         for (const entry of resume.projects) {
           writer.writeText(entry.name, {
-            size: BODY_SIZE,
+            size: bodySize,
             font: boldFont,
             gapAfter: 1,
           });
           if (entry.description) {
             writer.writeText(entry.description, {
-              size: BODY_SIZE,
+              size: bodySize,
               font: regularFont,
             });
           }

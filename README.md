@@ -79,6 +79,42 @@ const html = exportResumeAsHtml(resume, { richText: true });
 const pdf = await exportResumeAsPdf(resume, { richText: true });
 ```
 
+#### Styling the document
+
+A resume has two readers: an ATS first, then a person. `style` adjusts the part people notice (type size, spacing, margins) without touching what the ATS depends on.
+
+```ts
+const pdf = await exportResumeAsPdf(resume, { style: 'comfortable' });
+
+const docx = await exportResumeAsDocx(resume, {
+  style: {
+    preset: 'compact', // start from a preset...
+    fontFamily: 'serif', // ...and override what you like
+    fontSize: 11,
+    margin: 54, // points; 72 = 1 inch
+    pageSize: 'a4',
+    headingCase: 'title', // "Experience" instead of "EXPERIENCE"
+  },
+});
+```
+
+| Option                             | Meaning                                                                | Allowed            |
+| ---------------------------------- | ---------------------------------------------------------------------- | ------------------ |
+| `fontFamily`                       | `sans-serif` (Helvetica/Arial), `serif` (Times), `monospace` (Courier) | those three        |
+| `fontSize`                         | body text, pt                                                          | 8 to 16            |
+| `nameFontSize` / `headingFontSize` | pt; default to 1.8x and 1x the body size                               | 12 to 36 / 8 to 18 |
+| `lineSpacing`                      | multiple of the font size                                              | 1 to 2             |
+| `sectionSpacing` / `entrySpacing`  | space above section headings / between entries, pt                     | 0 to 36 / 0 to 24  |
+| `margin`                           | all four sides, pt                                                     | 18 to 108          |
+| `pageSize`                         | `letter` or `a4` (PDF and DOCX)                                        | those two          |
+| `headingCase`                      | `upper` or `title`                                                     | those two          |
+
+Presets: `compact` (tighter, fits more per page), `standard` (the built-in look, and the default), and `comfortable` (roomier). Anything you leave unset keeps the exporter's default, so output only changes when you ask for it. Plain text has no layout and ignores `style`.
+
+**What always stays ATS-safe.** Style never changes the structure: one column of real, selectable text (no images of text, tables, text boxes, headers, or footers), real section headings, a standard-font family that every PDF reader, Word install, and browser has, and the same reading order. Out-of-range values throw a descriptive `RangeError` rather than producing a broken document.
+
+`checkExportStyle(style)` flags choices that are allowed but hard on human readers (body text under 10 pt, line spacing under 1.1, margins under half an inch) using the same finding shape as `checkResumeStructure`, so you can show both together.
+
 #### Choosing a validator
 
 | Style           | Import                                                                | Extra dependency |
