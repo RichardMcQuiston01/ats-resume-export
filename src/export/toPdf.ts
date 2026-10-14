@@ -4,6 +4,7 @@ import type { PDFFont, PDFPage } from 'pdf-lib';
 import { parseMarkdownRuns, type RichTextRun } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
+import { entryHeading } from './entryHeading';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
 import { resolveExportStyle, type FontFamily, type PageSize } from './style';
@@ -364,9 +365,11 @@ export async function exportResumeAsPdf(
       if (resume.experience.length > 0) {
         writeSectionHeading('Experience');
         for (const entry of resume.experience) {
-          const heading = [entry.title, entry.company]
-            .filter(Boolean)
-            .join(' — ');
+          const heading = entryHeading(
+            [entry.title, entry.company],
+            entry.location,
+            ' — '
+          );
           writeEntryHeading(
             heading,
             formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
@@ -379,9 +382,11 @@ export async function exportResumeAsPdf(
       if (resume.education.length > 0) {
         writeSectionHeading('Education');
         for (const entry of resume.education) {
-          const heading = [entry.credential, entry.institution]
-            .filter(Boolean)
-            .join(' — ');
+          const heading = entryHeading(
+            [entry.credential, entry.institution],
+            entry.location,
+            ' — '
+          );
           writeEntryHeading(
             heading,
             formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)

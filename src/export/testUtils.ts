@@ -39,13 +39,18 @@ export interface PdfTextRun {
   font: string;
 }
 
-const WIN_ANSI_BULLET = 0x95;
+/** WinAnsi bytes in the 0x80 to 0x9F range that differ from Latin-1 (the punctuation resumes use). */
+const WIN_ANSI_PUNCTUATION: Record<number, string> = {
+  0x95: '•',
+  0x96: '–',
+  0x97: '—',
+};
 
 function decodeHexString(hex: string): string {
   let text = '';
   for (let index = 0; index < hex.length; index += 2) {
     const code = parseInt(hex.slice(index, index + 2), 16);
-    text += code === WIN_ANSI_BULLET ? '•' : String.fromCharCode(code);
+    text += WIN_ANSI_PUNCTUATION[code] ?? String.fromCharCode(code);
   }
   return text;
 }

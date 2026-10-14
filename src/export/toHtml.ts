@@ -1,6 +1,7 @@
 import { parseMarkdownRuns } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
+import { entryHeading } from './entryHeading';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
 import {
@@ -162,7 +163,7 @@ export function exportResumeAsHtml(
         const entries = resume.experience
           .map((entry) => {
             const heading = escapeHtml(
-              [entry.title, entry.company].filter(Boolean).join(' — ')
+              entryHeading([entry.title, entry.company], entry.location)
             );
             const dateRange = escapeHtml(
               formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
@@ -184,7 +185,10 @@ export function exportResumeAsHtml(
         const entries = resume.education
           .map((entry) => {
             const heading = escapeHtml(
-              [entry.credential, entry.institution].filter(Boolean).join(' — ')
+              entryHeading(
+                [entry.credential, entry.institution],
+                entry.location
+              )
             );
             const dateRange = escapeHtml(
               formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
