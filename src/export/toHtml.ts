@@ -1,5 +1,8 @@
-import type { Resume } from '../types';
+import { parseMarkdownRuns } from '../richText';
+import { resolveSectionOrder } from '../sections';
+import type { Resume, SectionKey } from '../types';
 import { formatDateRange } from './formatDateRange';
+import type { ExportOptions } from './options';
 
 function isPresent(value: string | undefined): value is string {
   return Boolean(value);
@@ -14,10 +17,25 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function highlightsList(highlights: string[]): string {
+function richHighlightHtml(highlight: string): string {
+  return parseMarkdownRuns(highlight)
+    .map((run) => {
+      const text = escapeHtml(run.text);
+      if (run.bold) {
+        return `<strong>${text}</strong>`;
+      }
+      return run.italic ? `<em>${text}</em>` : text;
+    })
+    .join('');
+}
+
+function highlightsList(highlights: string[], richText: boolean): string {
   const items = highlights
     .filter((highlight) => highlight.trim().length > 0)
-    .map((highlight) => `<li>${escapeHtml(highlight)}</li>`)
+    .map(
+      (highlight) =>
+        `<li>${richText ? richHighlightHtml(highlight) : escapeHtml(highlight)}</li>`
+    )
     .join('');
   return items ? `<ul>${items}</ul>` : '';
 }
@@ -26,7 +44,11 @@ function highlightsList(highlights: string[]): string {
  * Renders a resume as a standalone, self-contained HTML document (inline
  * `<style>`, no external assets) — opens in any browser and prints cleanly.
  */
-export function exportResumeAsHtml(resume: Resume): string {
+export function exportResumeAsHtml(
+  resume: Resume,
+  options: ExportOptions = {}
+): string {
+  const richText = options.richText ?? false;
   const { contact } = resume;
   const title = escapeHtml(contact.fullName || 'Resume');
   const sections: string[] = [];
@@ -54,94 +76,107 @@ export function exportResumeAsHtml(resume: Resume): string {
 </section>`);
   }
 
-  if (resume.experience.length > 0) {
-    const entries = resume.experience
-      .map((entry) => {
-        const heading = escapeHtml(
-          [entry.title, entry.company].filter(Boolean).join(' — ')
-        );
-        const dateRange = escapeHtml(
-          formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
-        );
-        return `<div class="entry">
-    <div class="entry-header"><span>${heading}</span><span class="entry-dates">${dateRange}</span></div>
-    ${highlightsList(entry.highlights)}
-  </div>`;
-      })
-      .join('');
-    sections.push(`<section>
-  <h2>Experience</h2>
-  ${entries}
-</section>`);
-  }
-
-  if (resume.education.length > 0) {
-    const entries = resume.education
-      .map((entry) => {
-        const heading = escapeHtml(
-          [entry.credential, entry.institution].filter(Boolean).join(' — ')
-        );
-        const dateRange = escapeHtml(
-          formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
-        );
-        return `<div class="entry">
-    <div class="entry-header"><span>${heading}</span><span class="entry-dates">${dateRange}</span></div>
-    ${highlightsList(entry.highlights)}
-  </div>`;
-      })
-      .join('');
-    sections.push(`<section>
-  <h2>Education</h2>
-  ${entries}
-</section>`);
-  }
-
-  if (resume.skills.length > 0) {
-    const groups = resume.skills
-      .map((group) => {
-        const skillsLine = escapeHtml(group.skills.filter(Boolean).join(', '));
-        return `<p><strong>${escapeHtml(group.category)}:</strong> ${skillsLine}</p>`;
-      })
-      .join('');
-    sections.push(`<section>
-  <h2>Skills</h2>
-  ${groups}
-</section>`);
-  }
-
-  if (resume.certifications.length > 0) {
-    const entries = resume.certifications
-      .map((entry) => {
-        const parts = [entry.name, entry.issuer, entry.issueDate]
-          .filter(isPresent)
-          .map(escapeHtml)
-          .join(' — ');
-        return `<p>${parts}</p>`;
-      })
-      .join('');
-    sections.push(`<section>
-  <h2>Certifications</h2>
-  ${entries}
-</section>`);
-  }
-
-  if (resume.projects.length > 0) {
-    const entries = resume.projects
-      .map((entry) => {
-        const description = entry.description
-          ? `<p>${escapeHtml(entry.description)}</p>`
-          : '';
-        return `<div class="entry">
-    <div class="entry-header"><span>${escapeHtml(entry.name)}</span></div>
-    ${description}
-    ${highlightsList(entry.highlights)}
-  </div>`;
-      })
-      .join('');
-    sections.push(`<section>
-  <h2>Projects</h2>
-  ${entries}
-</section>`);
+  const sectionBuilders: Record<SectionKey, () => void> = {
+    experience: () => {
+      if (resume.experience.length > 0) {
+        const entries = resume.experience
+          .map((entry) => {
+            const heading = escapeHtml(
+              [entry.title, entry.company].filter(Boolean).join(' — ')
+            );
+            const dateRange = escapeHtml(
+              formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
+            );
+            return `<div class="entry">
+      <div class="entry-header"><span>${heading}</span><span class="entry-dates">${dateRange}</span></div>
+      ${highlightsList(entry.highlights, richText)}
+    </div>`;
+          })
+          .join('');
+        sections.push(`<section>
+    <h2>Experience</h2>
+    ${entries}
+  </section>`);
+      }
+    },
+    education: () => {
+      if (resume.education.length > 0) {
+        const entries = resume.education
+          .map((entry) => {
+            const heading = escapeHtml(
+              [entry.credential, entry.institution].filter(Boolean).join(' — ')
+            );
+            const dateRange = escapeHtml(
+              formatDateRange(entry.startDate, entry.endDate, entry.isCurrent)
+            );
+            return `<div class="entry">
+      <div class="entry-header"><span>${heading}</span><span class="entry-dates">${dateRange}</span></div>
+      ${highlightsList(entry.highlights, richText)}
+    </div>`;
+          })
+          .join('');
+        sections.push(`<section>
+    <h2>Education</h2>
+    ${entries}
+  </section>`);
+      }
+    },
+    skills: () => {
+      if (resume.skills.length > 0) {
+        const groups = resume.skills
+          .map((group) => {
+            const skillsLine = escapeHtml(
+              group.skills.filter(Boolean).join(', ')
+            );
+            return `<p><strong>${escapeHtml(group.category)}:</strong> ${skillsLine}</p>`;
+          })
+          .join('');
+        sections.push(`<section>
+    <h2>Skills</h2>
+    ${groups}
+  </section>`);
+      }
+    },
+    certifications: () => {
+      if (resume.certifications.length > 0) {
+        const entries = resume.certifications
+          .map((entry) => {
+            const parts = [entry.name, entry.issuer, entry.issueDate]
+              .filter(isPresent)
+              .map(escapeHtml)
+              .join(' — ');
+            return `<p>${parts}</p>`;
+          })
+          .join('');
+        sections.push(`<section>
+    <h2>Certifications</h2>
+    ${entries}
+  </section>`);
+      }
+    },
+    projects: () => {
+      if (resume.projects.length > 0) {
+        const entries = resume.projects
+          .map((entry) => {
+            const description = entry.description
+              ? `<p>${escapeHtml(entry.description)}</p>`
+              : '';
+            return `<div class="entry">
+      <div class="entry-header"><span>${escapeHtml(entry.name)}</span></div>
+      ${description}
+      ${highlightsList(entry.highlights, richText)}
+    </div>`;
+          })
+          .join('');
+        sections.push(`<section>
+    <h2>Projects</h2>
+    ${entries}
+  </section>`);
+      }
+    },
+  };
+  for (const key of resolveSectionOrder(resume)) {
+    sectionBuilders[key]();
   }
 
   return `<!doctype html>

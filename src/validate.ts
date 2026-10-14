@@ -3,7 +3,9 @@ import {
   MAX_SCREENSHOT_DATA_URL_LENGTH,
   RECOMMENDATION_RELATIONSHIPS,
   RESUME_SCHEMA_VERSION,
+  SECTION_KEYS,
   type Resume,
+  type SectionKey,
 } from './types';
 
 /** One validation problem, located by a path such as `['experience', 0, 'startDate']`. */
@@ -247,6 +249,36 @@ class Checker {
   }
 }
 
+/** Reads the optional `sectionOrder`: known section keys, no duplicates. */
+function readSectionOrder(
+  checker: Checker,
+  input: UnknownRecord
+): SectionKey[] | undefined {
+  const value = input.sectionOrder;
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    checker.fail(['sectionOrder'], 'Invalid input: expected array');
+    return undefined;
+  }
+  const order: SectionKey[] = [];
+  value.forEach((entry: unknown, index: number) => {
+    const key = SECTION_KEYS.find((candidate) => candidate === entry);
+    if (key === undefined) {
+      checker.fail(
+        ['sectionOrder', index],
+        `Invalid option: expected one of ${SECTION_KEYS.join('|')}`
+      );
+    } else if (order.includes(key)) {
+      checker.fail(['sectionOrder', index], 'Duplicate section');
+    } else {
+      order.push(key);
+    }
+  });
+  return order;
+}
+
 /** Drops keys whose value is `undefined`, keeping output shape tidy. */
 function compact<T extends object>(value: T): T {
   return Object.fromEntries(
@@ -462,6 +494,8 @@ function readResume(input: unknown): ParseResult<Resume> {
     }
   );
 
+  const sectionOrder = readSectionOrder(c, input);
+
   if (c.issues.length > 0 || !contact) {
     return { success: false, issues: c.issues };
   }
@@ -485,6 +519,7 @@ function readResume(input: unknown): ParseResult<Resume> {
         featuredProjectIds: featured,
         recommendations,
       }),
+      sectionOrder,
     }),
   };
 }
