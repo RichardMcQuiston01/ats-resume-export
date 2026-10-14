@@ -1,4 +1,4 @@
-# Project Title
+# @richardmcquiston01/ats-resume-export
 
 - Author: [Richard McQuiston](mailto:richard.mcquiston@gmail.com)
 - Website: https://richardmcquiston.com/
@@ -8,6 +8,8 @@
 | [Overview](#overview) | [Getting Started](#getting-started) | [Buy Me a Coffee](#buy-me-a-coffee) | [License](#license) | [Copyright](#copyright) |
 
 ## Overview
+
+Framework agnostic TypeScript package for a exporting resume to an ATS(Applicant Tracking System) compatible format.
 
 [Back to Top](#table-of-contents)
 
