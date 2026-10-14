@@ -1,7 +1,10 @@
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 
-import type { Resume } from '../types';
+import { parseMarkdownRuns } from '../richText';
+import { resolveSectionOrder } from '../sections';
+import type { Resume, SectionKey } from '../types';
 import { formatDateRange } from './formatDateRange';
+import type { ExportOptions } from './options';
 
 function sectionHeading(text: string): Paragraph {
   return new Paragraph({
@@ -11,8 +14,17 @@ function sectionHeading(text: string): Paragraph {
   });
 }
 
-function bulletParagraph(text: string): Paragraph {
-  return new Paragraph({ text, bullet: { level: 0 } });
+function bulletParagraph(text: string, richText: boolean): Paragraph {
+  if (!richText) {
+    return new Paragraph({ text, bullet: { level: 0 } });
+  }
+  return new Paragraph({
+    children: parseMarkdownRuns(text).map(
+      (run) =>
+        new TextRun({ text: run.text, bold: run.bold, italics: run.italic })
+    ),
+    bullet: { level: 0 },
+  });
 }
 
 function entryHeadingParagraph(heading: string, dateRange: string): Paragraph {
@@ -24,7 +36,11 @@ function entryHeadingParagraph(heading: string, dateRange: string): Paragraph {
 }
 
 /** Renders a resume as a .docx document, importable in Microsoft Word. */
-export async function exportResumeAsDocx(resume: Resume): Promise<Blob> {
+export async function exportResumeAsDocx(
+  resume: Resume,
+  options: ExportOptions = {}
+): Promise<Blob> {
+  const richText = options.richText ?? false;
   const { contact } = resume;
   const children: Paragraph[] = [];
 
@@ -62,87 +78,102 @@ export async function exportResumeAsDocx(resume: Resume): Promise<Blob> {
     children.push(new Paragraph({ text: resume.summary }));
   }
 
-  if (resume.experience.length > 0) {
-    children.push(sectionHeading('Experience'));
-    for (const entry of resume.experience) {
-      const heading = [entry.title, entry.company].filter(Boolean).join(' — ');
-      const dateRange = formatDateRange(
-        entry.startDate,
-        entry.endDate,
-        entry.isCurrent
-      );
-      children.push(entryHeadingParagraph(heading, dateRange));
-      for (const highlight of entry.highlights) {
-        if (highlight.trim()) {
-          children.push(bulletParagraph(highlight));
+  const sectionBuilders: Record<SectionKey, () => void> = {
+    experience: () => {
+      if (resume.experience.length > 0) {
+        children.push(sectionHeading('Experience'));
+        for (const entry of resume.experience) {
+          const heading = [entry.title, entry.company]
+            .filter(Boolean)
+            .join(' — ');
+          const dateRange = formatDateRange(
+            entry.startDate,
+            entry.endDate,
+            entry.isCurrent
+          );
+          children.push(entryHeadingParagraph(heading, dateRange));
+          for (const highlight of entry.highlights) {
+            if (highlight.trim()) {
+              children.push(bulletParagraph(highlight, richText));
+            }
+          }
         }
       }
-    }
-  }
-
-  if (resume.education.length > 0) {
-    children.push(sectionHeading('Education'));
-    for (const entry of resume.education) {
-      const heading = [entry.credential, entry.institution]
-        .filter(Boolean)
-        .join(' — ');
-      const dateRange = formatDateRange(
-        entry.startDate,
-        entry.endDate,
-        entry.isCurrent
-      );
-      children.push(entryHeadingParagraph(heading, dateRange));
-      for (const highlight of entry.highlights) {
-        if (highlight.trim()) {
-          children.push(bulletParagraph(highlight));
+    },
+    education: () => {
+      if (resume.education.length > 0) {
+        children.push(sectionHeading('Education'));
+        for (const entry of resume.education) {
+          const heading = [entry.credential, entry.institution]
+            .filter(Boolean)
+            .join(' — ');
+          const dateRange = formatDateRange(
+            entry.startDate,
+            entry.endDate,
+            entry.isCurrent
+          );
+          children.push(entryHeadingParagraph(heading, dateRange));
+          for (const highlight of entry.highlights) {
+            if (highlight.trim()) {
+              children.push(bulletParagraph(highlight, richText));
+            }
+          }
         }
       }
-    }
-  }
-
-  if (resume.skills.length > 0) {
-    children.push(sectionHeading('Skills'));
-    for (const group of resume.skills) {
-      const skillsLine = group.skills.filter(Boolean).join(', ');
-      if (skillsLine) {
-        children.push(
-          new Paragraph({
-            children: [
-              new TextRun({ text: `${group.category}: `, bold: true }),
-              new TextRun({ text: skillsLine }),
-            ],
-          })
-        );
-      }
-    }
-  }
-
-  if (resume.certifications.length > 0) {
-    children.push(sectionHeading('Certifications'));
-    for (const entry of resume.certifications) {
-      const parts = [entry.name, entry.issuer, entry.issueDate].filter(Boolean);
-      children.push(new Paragraph({ text: parts.join(' — ') }));
-    }
-  }
-
-  if (resume.projects.length > 0) {
-    children.push(sectionHeading('Projects'));
-    for (const entry of resume.projects) {
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: entry.name, bold: true })],
-          spacing: { before: 120 },
-        })
-      );
-      if (entry.description) {
-        children.push(new Paragraph({ text: entry.description }));
-      }
-      for (const highlight of entry.highlights) {
-        if (highlight.trim()) {
-          children.push(bulletParagraph(highlight));
+    },
+    skills: () => {
+      if (resume.skills.length > 0) {
+        children.push(sectionHeading('Skills'));
+        for (const group of resume.skills) {
+          const skillsLine = group.skills.filter(Boolean).join(', ');
+          if (skillsLine) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `${group.category}: `, bold: true }),
+                  new TextRun({ text: skillsLine }),
+                ],
+              })
+            );
+          }
         }
       }
-    }
+    },
+    certifications: () => {
+      if (resume.certifications.length > 0) {
+        children.push(sectionHeading('Certifications'));
+        for (const entry of resume.certifications) {
+          const parts = [entry.name, entry.issuer, entry.issueDate].filter(
+            Boolean
+          );
+          children.push(new Paragraph({ text: parts.join(' — ') }));
+        }
+      }
+    },
+    projects: () => {
+      if (resume.projects.length > 0) {
+        children.push(sectionHeading('Projects'));
+        for (const entry of resume.projects) {
+          children.push(
+            new Paragraph({
+              children: [new TextRun({ text: entry.name, bold: true })],
+              spacing: { before: 120 },
+            })
+          );
+          if (entry.description) {
+            children.push(new Paragraph({ text: entry.description }));
+          }
+          for (const highlight of entry.highlights) {
+            if (highlight.trim()) {
+              children.push(bulletParagraph(highlight, richText));
+            }
+          }
+        }
+      }
+    },
+  };
+  for (const key of resolveSectionOrder(resume)) {
+    sectionBuilders[key]();
   }
 
   const doc = new Document({ sections: [{ children }] });

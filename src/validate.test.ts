@@ -79,6 +79,15 @@ const INVALID_MUTATIONS: Mutation[] = [
     },
   ],
   ['non-object contact', (r) => (r.contact = WRONG('x'))],
+  ['sectionOrder not an array', (r) => (r.sectionOrder = WRONG('skills'))],
+  [
+    'sectionOrder with an unknown section',
+    (r) => (r.sectionOrder = WRONG(['hobbies'])),
+  ],
+  [
+    'sectionOrder with a duplicate',
+    (r) => (r.sectionOrder = ['skills', 'skills']),
+  ],
 ];
 
 function cloneFixture(): Resume {
@@ -121,6 +130,34 @@ describe('plain validator', () => {
     const result = resumeValidator['~standard'].validate(createFixtureResume());
     expect(result instanceof Promise).toBe(false);
     expect((result as { issues?: unknown }).issues).toBeUndefined();
+  });
+});
+
+describe('sectionOrder', () => {
+  it.each([
+    [
+      'a full order',
+      ['projects', 'skills', 'education', 'experience', 'certifications'],
+    ],
+    ['a partial order', ['skills']],
+    ['an empty order', []],
+  ])('both validators accept %s and keep it', (_name, order) => {
+    const input = { ...cloneFixture(), sectionOrder: order };
+    const plain = safeParseResume(input);
+    const zod = resumeSchema.safeParse(input);
+
+    expect(plain.success).toBe(true);
+    expect(zod.success).toBe(true);
+    if (plain.success && zod.success) {
+      expect(plain.data.sectionOrder).toStrictEqual(order);
+      expect(zod.data.sectionOrder).toStrictEqual(order);
+    }
+  });
+
+  it('is optional: a resume without it stays without it', () => {
+    const plain = safeParseResume(cloneFixture());
+
+    expect(plain.success && 'sectionOrder' in plain.data).toBe(false);
   });
 });
 

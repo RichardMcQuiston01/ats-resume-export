@@ -30,6 +30,17 @@ export const RECOMMENDATION_RELATIONSHIPS = [
   'other',
 ] as const;
 
+/** Sections that can be reordered. The summary is always rendered first. */
+export const SECTION_KEYS = [
+  'experience',
+  'education',
+  'skills',
+  'certifications',
+  'projects',
+] as const;
+
+export type SectionKey = (typeof SECTION_KEYS)[number];
+
 export type RecommendationRelationship =
   (typeof RECOMMENDATION_RELATIONSHIPS)[number];
 
@@ -141,4 +152,9 @@ export interface Resume {
   certifications: CertificationEntry[];
   projects: ProjectEntry[];
   portfolio: Portfolio;
+  /**
+   * Optional order for the reorderable sections (see `SECTION_KEYS`). Sections
+   * not listed follow in their default order. Unset means the default order.
+   */
+  sectionOrder?: SectionKey[] | undefined;
 }

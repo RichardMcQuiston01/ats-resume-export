@@ -61,6 +61,24 @@ const findings = checkResumeStructure(resume);
 
 DOCX and PDF exporters return a `Blob` (Node 18+ and browsers). In Node, write one with `Buffer.from(await blob.arrayBuffer())`.
 
+#### Section order
+
+Set `sectionOrder` on a resume to reorder the Experience, Education, Skills, Certifications, and Projects sections. Every exporter honors it. Sections you leave out follow in their default order, and the summary always comes first.
+
+```ts
+const resume = { ...base, sectionOrder: ['skills', 'experience'] };
+// Skills, Experience, then Education, Certifications, Projects
+```
+
+#### Rich-text highlights
+
+Pass `{ richText: true }` to render `**bold**` and `*italic*` in highlights as styled text in the HTML, DOCX, and PDF exporters. The plain-text exporter strips the markers. It is off by default, so a literal `*` in a highlight stays as typed.
+
+```ts
+const html = exportResumeAsHtml(resume, { richText: true });
+const pdf = await exportResumeAsPdf(resume, { richText: true });
+```
+
 #### Choosing a validator
 
 | Style           | Import                                                                | Extra dependency |

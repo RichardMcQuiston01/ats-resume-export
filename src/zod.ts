@@ -4,10 +4,17 @@ import {
   MAX_SCREENSHOT_DATA_URL_LENGTH,
   RECOMMENDATION_RELATIONSHIPS,
   RESUME_SCHEMA_VERSION,
+  SECTION_KEYS,
   type Resume as ResumeType,
 } from './types';
 
 export { MAX_SCREENSHOT_DATA_URL_LENGTH, RESUME_SCHEMA_VERSION } from './types';
+
+const sectionOrderSchema = z
+  .array(z.enum(SECTION_KEYS))
+  .refine((order) => new Set(order).size === order.length, {
+    message: 'Duplicate section',
+  });
 
 const YEAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -142,6 +149,7 @@ export const resumeSchema = z.object({
     featuredProjectIds: [],
     recommendations: [],
   }),
+  sectionOrder: sectionOrderSchema.optional(),
 });
 
 const draftLinkSchema = z.object({
@@ -255,6 +263,7 @@ export const resumeDraftSchema = z.object({
     featuredProjectIds: [],
     recommendations: [],
   }),
+  sectionOrder: sectionOrderSchema.optional(),
 });
 
 /** Zod-inferred resume type; must stay identical to the plain `Resume`. */
