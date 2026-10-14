@@ -11,14 +11,26 @@ export function orderOf(text: string, markers: string[]): string[] {
     .map((entry) => entry.marker);
 }
 
-/** Reads `word/document.xml` out of a .docx blob. */
-export async function docxXml(blob: Blob): Promise<string> {
+/** Reads a part (default `word/document.xml`) out of a .docx blob. */
+export async function docxXml(
+  blob: Blob,
+  part: string = 'word/document.xml'
+): Promise<string> {
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-  const file = zip.file('word/document.xml');
+  const file = zip.file(part);
   if (!file) {
-    throw new Error('word/document.xml is missing from the .docx archive');
+    throw new Error(`${part} is missing from the .docx archive`);
   }
   return file.async('string');
+}
+
+/** Page count and the size of the first page (in points) of a PDF blob. */
+export async function pdfPageInfo(
+  blob: Blob
+): Promise<{ count: number; width: number; height: number }> {
+  const doc = await PDFDocument.load(await blob.arrayBuffer());
+  const first = doc.getPages()[0]?.getSize() ?? { width: 0, height: 0 };
+  return { count: doc.getPageCount(), ...first };
 }
 
 export interface PdfTextRun {
@@ -86,4 +98,27 @@ export async function pdfTextRuns(blob: Blob): Promise<PdfTextRun[]> {
 /** All text drawn on a PDF, joined in drawing order. */
 export async function pdfText(blob: Blob): Promise<string> {
   return (await pdfTextRuns(blob)).map((run) => run.text).join('\n');
+}
+
+/** Where the first line of text on the first page is placed, in points from the bottom-left. */
+export async function pdfFirstTextOrigin(
+  blob: Blob
+): Promise<{ x: number; y: number }> {
+  const doc = await PDFDocument.load(await blob.arrayBuffer());
+  const contents = doc.getPages()[0]?.node.Contents();
+  const stream =
+    contents instanceof PDFArray
+      ? doc.context.lookup(contents.asArray()[0])
+      : contents;
+  if (!(stream instanceof PDFRawStream)) {
+    throw new Error('The first page has no readable content stream');
+  }
+  const content = Buffer.from(decodePDFRawStream(stream).decode()).toString(
+    'latin1'
+  );
+  const match = /1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/.exec(content);
+  if (!match?.[1] || !match[2]) {
+    throw new Error('No positioned text found on the first page');
+  }
+  return { x: Number(match[1]), y: Number(match[2]) };
 }

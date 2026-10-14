@@ -3,6 +3,11 @@ import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
+import {
+  resolveExportStyle,
+  type FontFamily,
+  type ResolvedExportStyle,
+} from './style';
 
 function isPresent(value: string | undefined): value is string {
   return Boolean(value);
@@ -40,6 +45,80 @@ function highlightsList(highlights: string[], richText: boolean): string {
   return items ? `<ul>${items}</ul>` : '';
 }
 
+const HTML_FONT_STACKS: Record<FontFamily, string> = {
+  'sans-serif': 'Arial, Helvetica, sans-serif',
+  serif: '"Times New Roman", Times, serif',
+  monospace: '"Courier New", Courier, monospace',
+};
+
+const HTML_PAGE_SIZES = { letter: 'letter', a4: 'A4' } as const;
+
+/** CSS appended after the built-in rules to apply style options. Empty when none are set. */
+function styleOverrides(style: ResolvedExportStyle): string {
+  if (!style.customized) {
+    return '';
+  }
+
+  const rules: string[] = [];
+  const body: string[] = [];
+  if (style.fontFamily !== undefined) {
+    body.push(`font-family: ${HTML_FONT_STACKS[style.fontFamily]}`);
+  }
+  if (style.fontSize !== undefined) {
+    body.push(`font-size: ${style.fontSize}pt`);
+  }
+  if (style.lineSpacing !== undefined) {
+    body.push(`line-height: ${style.lineSpacing}`);
+  }
+  if (style.margin !== undefined) {
+    body.push(`padding: 0 ${style.margin}pt`);
+  }
+  if (body.length > 0) {
+    rules.push(`body { ${body.join('; ')}; }`);
+  }
+  if (style.nameFontSize !== undefined) {
+    rules.push(`h1 { font-size: ${style.nameFontSize}pt; }`);
+  }
+
+  const heading: string[] = [];
+  if (style.headingFontSize !== undefined) {
+    heading.push(`font-size: ${style.headingFontSize}pt`);
+  }
+  if (style.headingCase === 'title') {
+    heading.push('text-transform: none', 'letter-spacing: normal');
+  }
+  if (style.sectionSpacing !== undefined) {
+    heading.push(`margin-top: ${style.sectionSpacing}pt`);
+  }
+  if (heading.length > 0) {
+    rules.push(`h2 { ${heading.join('; ')}; }`);
+  }
+
+  if (style.fontSize !== undefined) {
+    rules.push('.contact { font-size: 0.9em; }');
+    rules.push('.entry-dates { font-size: 0.85em; }');
+  }
+  if (style.entrySpacing !== undefined) {
+    rules.push(`.entry { margin-top: ${style.entrySpacing}pt; }`);
+  }
+
+  const page: string[] = [];
+  if (style.pageSize !== undefined) {
+    page.push(`size: ${HTML_PAGE_SIZES[style.pageSize]}`);
+  }
+  if (style.margin !== undefined) {
+    page.push(`margin: ${style.margin}pt`);
+  }
+  if (page.length > 0) {
+    rules.push(`@page { ${page.join('; ')}; }`);
+  }
+  if (style.margin !== undefined) {
+    rules.push('@media print { body { padding: 0; } }');
+  }
+
+  return `  /* style options */\n${rules.map((rule) => `  ${rule}`).join('\n')}\n`;
+}
+
 /**
  * Renders a resume as a standalone, self-contained HTML document (inline
  * `<style>`, no external assets) — opens in any browser and prints cleanly.
@@ -49,6 +128,7 @@ export function exportResumeAsHtml(
   options: ExportOptions = {}
 ): string {
   const richText = options.richText ?? false;
+  const styleCss = styleOverrides(resolveExportStyle(options.style));
   const { contact } = resume;
   const title = escapeHtml(contact.fullName || 'Resume');
   const sections: string[] = [];
@@ -198,7 +278,7 @@ export function exportResumeAsHtml(
   @media print {
     body { margin: 0; max-width: none; }
   }
-</style>
+${styleCss}</style>
 </head>
 <body>
 ${sections.join('\n')}
