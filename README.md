@@ -103,14 +103,14 @@ npm run ci   # lint, format check, typecheck, tests, build
 Releases publish to npm from GitHub Actions (`.github/workflows/publish.yml`) when a version tag is pushed.
 
 1. Bump `version` in `package.json` and add a `CHANGELOG.md` entry, then merge to `main`.
-2. Tag the merge commit and push the tag:
+2. Tag the merge commit on `main` and push the tag:
 
    ```sh
    git tag v0.1.0
    git push origin v0.1.0
    ```
 
-3. The workflow checks that the tag matches `package.json`, runs `npm run ci`, and publishes with provenance.
+3. The workflow checks that the tagged commit is on `main` and that the tag matches `package.json`, runs `npm run ci`, and publishes with provenance. A tag on any other branch fails without publishing.
 
 One-time setup: add an npm automation token as the `NPM_TOKEN` secret in the repo's `npm` environment (Settings, Environments), and make sure the `@richardmcquiston01` scope is owned by your npm account.
 
