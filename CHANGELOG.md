@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.4.0
+
+- Added `ExportOptions.details` to print entry details the exporters previously left out, each switched on and placed independently: a project's links (`url`, `repoUrl`, `demoUrl`, each shown once), tech stack, and outcome, and a certification's `credentialUrl`.
+- Each detail takes `'off'` (default), `'heading'` (on the entry's heading line, after its name), or `'below'` (its own labelled line under the heading: `Link:`/`Code:`/`Demo:`, `Tech stack:`, `Credential:`). Outcome only supports `'off'` and `'below'`. Applies to HTML (URLs become links), DOCX, PDF, and plain text.
+- Output is unchanged unless you set `details`: with nothing set, every format is byte-for-byte what 0.3.1 produced. An unknown placement throws a descriptive `RangeError`.
+- New exports: `resolveExportDetails`, `validateExportDetails`, `DETAIL_PLACEMENTS`, `OUTCOME_PLACEMENTS`, and the `ExportDetails`, `DetailPlacement`, `OutcomePlacement`, and `ResolvedExportDetails` types.
+
 ## 0.3.1
 
 - Fixed a dangling separator in date ranges: an entry with only one date (for example an education entry with just a graduation date) now shows `(2018-05)` instead of `( - 2018-05)`. The same applies to a lone start date.

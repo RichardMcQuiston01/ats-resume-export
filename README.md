@@ -115,6 +115,23 @@ Presets: `compact` (tighter, fits more per page), `standard` (the built-in look,
 
 `checkExportStyle(style)` flags choices that are allowed but hard on human readers (body text under 10 pt, line spacing under 1.1, margins under half an inch) using the same finding shape as `checkResumeStructure`, so you can show both together.
 
+#### Project links, tech stack, and credentials
+
+The model carries more than the exporters print by default. Switch on what you want, and choose where it goes, with `details`:
+
+```ts
+exportResumeAsPdf(resume, {
+  details: {
+    projectLinks: 'below', // Link: / Code: / Demo: on its own line
+    projectTechStack: 'heading', // after the project name
+    projectOutcome: 'below', // Outcome: ...
+    credentialUrl: 'below', // Credential: ...
+  },
+});
+```
+
+Each option is `'off'` (the default), `'heading'`, or `'below'`; `projectOutcome` supports only `'off'` and `'below'`. Nothing is printed unless you ask, so existing output does not change. A link that appears in more than one field is shown once, and in HTML the URLs become links. An unknown value throws a `RangeError` naming the option.
+
 #### Choosing a validator
 
 | Style           | Import                                                                | Extra dependency |

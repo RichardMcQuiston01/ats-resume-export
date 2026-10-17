@@ -1,6 +1,11 @@
 import { stripMarkdownRuns } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
+import {
+  certificationExtras,
+  projectExtras,
+  resolveExportDetails,
+} from './details';
 import { entryHeading } from './entryHeading';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
@@ -14,6 +19,7 @@ export function exportResumeAsPlainText(
   options: ExportOptions = {}
 ): string {
   const lines: string[] = [];
+  const details = resolveExportDetails(options.details);
   const renderHighlight = (highlight: string): string =>
     options.richText ? stripMarkdownRuns(highlight) : highlight;
   const { contact } = resume;
@@ -103,10 +109,14 @@ export function exportResumeAsPlainText(
       if (resume.certifications.length > 0) {
         lines.push('', 'CERTIFICATIONS');
         for (const entry of resume.certifications) {
-          const parts = [entry.name, entry.issuer, entry.issueDate].filter(
-            Boolean
-          );
-          lines.push(parts.join(' - '));
+          const extras = certificationExtras(entry, details);
+          const parts = [
+            entry.name,
+            entry.issuer,
+            entry.issueDate,
+            ...extras.headingParts,
+          ].filter(Boolean);
+          lines.push(parts.join(' - '), ...extras.belowLines);
         }
       }
     },
@@ -114,10 +124,12 @@ export function exportResumeAsPlainText(
       if (resume.projects.length > 0) {
         lines.push('', 'PROJECTS');
         for (const entry of resume.projects) {
-          lines.push('', entry.name);
+          const extras = projectExtras(entry, details);
+          lines.push('', [entry.name, ...extras.headingParts].join(' - '));
           if (entry.description) {
             lines.push(entry.description);
           }
+          lines.push(...extras.belowLines);
           for (const highlight of entry.highlights) {
             if (highlight.trim()) {
               lines.push(`- ${renderHighlight(highlight)}`);

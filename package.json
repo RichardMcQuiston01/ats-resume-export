@@ -1,6 +1,6 @@
 {
   "name": "@richardmcquiston01/ats-resume-export",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Framework agnostic TypeScript package for exporting a resume to an ATS (Applicant Tracking System) compatible format: DOCX, PDF, HTML, plain text, and JSON, plus ATS checks and pluggable validation.",
   "license": "Apache-2.0",
   "author": "Richard McQuiston <richard.mcquiston@gmail.com> (https://richardmcquiston.com/)",

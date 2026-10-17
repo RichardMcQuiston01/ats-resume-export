@@ -1,6 +1,11 @@
 import { parseMarkdownRuns } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
+import {
+  certificationExtras,
+  projectExtras,
+  resolveExportDetails,
+} from './details';
 import { entryHeading } from './entryHeading';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
@@ -21,6 +26,18 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/** Escapes `text`, turning any http(s) URLs in it into links. */
+function linkifyHtml(text: string): string {
+  return text
+    .split(/(https?:\/\/[^\s|]+)/)
+    .map((part, index) =>
+      index % 2 === 1
+        ? `<a href="${escapeHtml(part)}">${escapeHtml(part)}</a>`
+        : escapeHtml(part)
+    )
+    .join('');
 }
 
 function richHighlightHtml(highlight: string): string {
@@ -129,6 +146,7 @@ export function exportResumeAsHtml(
   options: ExportOptions = {}
 ): string {
   const richText = options.richText ?? false;
+  const details = resolveExportDetails(options.details);
   const styleCss = styleOverrides(resolveExportStyle(options.style));
   const { contact } = resume;
   const title = escapeHtml(contact.fullName || 'Resume');
@@ -225,11 +243,20 @@ export function exportResumeAsHtml(
       if (resume.certifications.length > 0) {
         const entries = resume.certifications
           .map((entry) => {
-            const parts = [entry.name, entry.issuer, entry.issueDate]
+            const extras = certificationExtras(entry, details);
+            const parts = [
+              entry.name,
+              entry.issuer,
+              entry.issueDate,
+              ...extras.headingParts,
+            ]
               .filter(isPresent)
-              .map(escapeHtml)
+              .map(linkifyHtml)
               .join(' — ');
-            return `<p>${parts}</p>`;
+            const below = extras.belowLines
+              .map((line) => `<p>${linkifyHtml(line)}</p>`)
+              .join('');
+            return `<p>${parts}</p>${below}`;
           })
           .join('');
         sections.push(`<section>
@@ -242,12 +269,19 @@ export function exportResumeAsHtml(
       if (resume.projects.length > 0) {
         const entries = resume.projects
           .map((entry) => {
+            const extras = projectExtras(entry, details);
             const description = entry.description
               ? `<p>${escapeHtml(entry.description)}</p>`
               : '';
+            const below = extras.belowLines
+              .map((line) => `<p>${linkifyHtml(line)}</p>`)
+              .join('');
+            const heading = [entry.name, ...extras.headingParts]
+              .map(linkifyHtml)
+              .join(' — ');
             return `<div class="entry">
-      <div class="entry-header"><span>${escapeHtml(entry.name)}</span></div>
-      ${description}
+      <div class="entry-header"><span>${heading}</span></div>
+      ${description}${below}
       ${highlightsList(entry.highlights, richText)}
     </div>`;
           })

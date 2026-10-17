@@ -12,6 +12,11 @@ import {
 import { parseMarkdownRuns } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
+import {
+  certificationExtras,
+  projectExtras,
+  resolveExportDetails,
+} from './details';
 import { entryHeading } from './entryHeading';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
@@ -164,6 +169,7 @@ export async function exportResumeAsDocx(
   options: ExportOptions = {}
 ): Promise<Blob> {
   const richText = options.richText ?? false;
+  const details = resolveExportDetails(options.details);
   const style = resolveExportStyle(options.style);
   const { contact } = resume;
   const children: Paragraph[] = [];
@@ -274,10 +280,17 @@ export async function exportResumeAsDocx(
       if (resume.certifications.length > 0) {
         children.push(sectionHeading('Certifications', style));
         for (const entry of resume.certifications) {
-          const parts = [entry.name, entry.issuer, entry.issueDate].filter(
-            Boolean
-          );
+          const extras = certificationExtras(entry, details);
+          const parts = [
+            entry.name,
+            entry.issuer,
+            entry.issueDate,
+            ...extras.headingParts,
+          ].filter(Boolean);
           children.push(new Paragraph({ text: parts.join(' — ') }));
+          for (const line of extras.belowLines) {
+            children.push(new Paragraph({ text: line }));
+          }
         }
       }
     },
@@ -285,9 +298,19 @@ export async function exportResumeAsDocx(
       if (resume.projects.length > 0) {
         children.push(sectionHeading('Projects', style));
         for (const entry of resume.projects) {
+          const extras = projectExtras(entry, details);
           children.push(
             new Paragraph({
-              children: [new TextRun({ text: entry.name, bold: true })],
+              children: [
+                new TextRun({ text: entry.name, bold: true }),
+                ...(extras.headingParts.length > 0
+                  ? [
+                      new TextRun({
+                        text: ` — ${extras.headingParts.join(' — ')}`,
+                      }),
+                    ]
+                  : []),
+              ],
               spacing: {
                 before:
                   style.entrySpacing === undefined
@@ -298,6 +321,9 @@ export async function exportResumeAsDocx(
           );
           if (entry.description) {
             children.push(new Paragraph({ text: entry.description }));
+          }
+          for (const line of extras.belowLines) {
+            children.push(new Paragraph({ text: line }));
           }
           for (const highlight of entry.highlights) {
             if (highlight.trim()) {
