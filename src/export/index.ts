@@ -1,3 +1,13 @@
+export {
+  DETAIL_PLACEMENTS,
+  OUTCOME_PLACEMENTS,
+  resolveExportDetails,
+  validateExportDetails,
+  type DetailPlacement,
+  type ExportDetails,
+  type OutcomePlacement,
+  type ResolvedExportDetails,
+} from './details';
 export { resumeFileBaseName } from './fileNames';
 export type { ExportOptions } from './options';
 export { exportResumeAsHtml } from './toHtml';

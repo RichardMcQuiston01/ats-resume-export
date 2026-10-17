@@ -4,6 +4,11 @@ import type { PDFFont, PDFPage } from 'pdf-lib';
 import { parseMarkdownRuns, type RichTextRun } from '../richText';
 import { resolveSectionOrder } from '../sections';
 import type { Resume, SectionKey } from '../types';
+import {
+  certificationExtras,
+  projectExtras,
+  resolveExportDetails,
+} from './details';
 import { entryHeading } from './entryHeading';
 import { formatDateRange } from './formatDateRange';
 import type { ExportOptions } from './options';
@@ -254,6 +259,7 @@ export async function exportResumeAsPdf(
   options: ExportOptions = {}
 ): Promise<Blob> {
   const richText = options.richText ?? false;
+  const details = resolveExportDetails(options.details);
   const doc = await PDFDocument.create();
   const style = resolveExportStyle(options.style);
   const fonts = PDF_FONTS[style.fontFamily ?? 'sans-serif'];
@@ -413,13 +419,20 @@ export async function exportResumeAsPdf(
       if (resume.certifications.length > 0) {
         writeSectionHeading('Certifications');
         for (const entry of resume.certifications) {
-          const parts = [entry.name, entry.issuer, entry.issueDate].filter(
-            Boolean
-          );
+          const extras = certificationExtras(entry, details);
+          const parts = [
+            entry.name,
+            entry.issuer,
+            entry.issueDate,
+            ...extras.headingParts,
+          ].filter(Boolean);
           writer.writeText(parts.join(' — '), {
             size: bodySize,
             font: regularFont,
           });
+          for (const line of extras.belowLines) {
+            writer.writeText(line, { size: bodySize, font: regularFont });
+          }
         }
       }
     },
@@ -427,7 +440,8 @@ export async function exportResumeAsPdf(
       if (resume.projects.length > 0) {
         writeSectionHeading('Projects');
         for (const entry of resume.projects) {
-          writer.writeText(entry.name, {
+          const extras = projectExtras(entry, details);
+          writer.writeText([entry.name, ...extras.headingParts].join(' — '), {
             size: bodySize,
             font: boldFont,
             gapAfter: 1,
@@ -437,6 +451,9 @@ export async function exportResumeAsPdf(
               size: bodySize,
               font: regularFont,
             });
+          }
+          for (const line of extras.belowLines) {
+            writer.writeText(line, { size: bodySize, font: regularFont });
           }
           writeHighlights(entry.highlights);
         }

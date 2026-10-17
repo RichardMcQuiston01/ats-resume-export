@@ -1,3 +1,4 @@
+import type { ExportDetails } from './details';
 import type { StyleOption } from './style';
 
 /** Options shared by the exporters. */
@@ -15,4 +16,11 @@ export interface ExportOptions {
    * Unset keeps each exporter's built-in look.
    */
   style?: StyleOption;
+  /**
+   * Entry details the exporters leave out by default (project links, tech
+   * stack and outcome, certification credential URLs), each switched on and
+   * placed independently. Applies to the HTML, DOCX, PDF, and plain-text
+   * exporters. Unset prints none of them, so output is unchanged.
+   */
+  details?: ExportDetails;
 }
